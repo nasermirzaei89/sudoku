@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sudoku Canvas</title>
+</head>
+<style>
+    body {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        margin: 0;
+    }
+</style>
+
+<body>
+    <canvas id="sudoku" width="500" height="820"></canvas>
+    <script>
+        const canvas = document.getElementById('sudoku');
+        const ctx = canvas.getContext('2d');
+
+        const boardSize = 450;
+        const cellSize = boardSize / 9;
+        const boardOffsetX = 25;
+        const boardOffsetY = canvas.height / 2 - boardSize / 2;
+        const numberSize = 40;
+        const numbersY = boardOffsetY + boardSize + numberSize + 20;
+        const newGameBtn = { x: 150, y: numbersY + 70, w: 200, h: 50 };
+
+        let puzzle = [];
+        let solution = [];
+        let userBoard = [];
+        let selectedCell = null;
+        let pencilMode = false;
+        let pencilMarks = Array.from({ length: 9 }, () => Array.from({ length: 9 }, () => []));
+
+        function deepCopy(board) { return board.map(row => row.slice()); }
+
+        function shuffle(arr) { for (let i = arr.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1));[arr[i], arr[j]] = [arr[j], arr[i]]; } }
+
+        function isSafe(board, row, col, num) {
+            for (let x = 0; x < 9; x++) {
+                if (x !== col && board[row][x] === num) return false;
+                if (x !== row && board[x][col] === num) return false;
+            }
+            const startRow = row - row % 3, startCol = col - col % 3;
+            for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) {
+                let rr = startRow + i, cc = startCol + j;
+                if ((rr !== row || cc !== col) && board[rr][cc] === num) return false;
+            }
+            return true;
+        }
+
+        function fillBoard(board) {
+            for (let row = 0; row < 9; row++) for (let col = 0; col < 9; col++) if (board[row][col] === 0) {
+                let nums = [1, 2, 3, 4, 5, 6, 7, 8, 9]; shuffle(nums);
+                for (let n of nums) { if (isSafe(board, row, col, n)) { board[row][col] = n; if (fillBoard(board)) return true; board[row][col] = 0; } }
+                return false;
+            }
+            return true;
+        }
+
+        function countSolutions(board) {
+            let count = 0;
+            function solve(bd) {
+                for (let row = 0; row < 9; row++) for (let col = 0; col < 9; col++) if (bd[row][col] === 0) {
+                    for (let n = 1; n <= 9; n++) if (isSafe(bd, row, col, n)) { bd[row][col] = n; solve(bd); bd[row][col] = 0; }
+                    return;
+                }
+                count++; if (count > 1) return;
+            }
+            solve(deepCopy(board));
+            return count;
+        }
+
+        function generatePuzzle(emptyCells) {
+            let board = Array.from({ length: 9 }, () => Array(9).fill(0));
+            fillBoard(board);
+            puzzle = deepCopy(board);
+            let cells = [];
+            for (let r = 0; r < 9; r++) for (let c = 0; c < 9; c++) cells.push([r, c]);
+            shuffle(cells);
+            let removed = 0;
+            // TODO: fix it to remove exact number of cells
+            for (let [r, c] of cells) {
+                if (removed >= emptyCells) break;
+
+                let backup = puzzle[r][c];
+                puzzle[r][c] = 0;
+
+                if (countSolutions(puzzle) !== 1) { puzzle[r][c] = backup; }
+                else { removed++; }
+            }
+            userBoard = puzzle.map(row => row.slice());
+            pencilMarks = Array.from({ length: 9 }, () => Array.from({ length: 9 }, () => []));
+        }
+
+        function drawBoard() {
+            ctx.fillStyle = '#efefef';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.save();
+            ctx.translate(boardOffsetX, boardOffsetY);
+
+            // Highlight logic
+            let highlightNum = null;
+            let highlightIsPencil = false;
+            if (selectedCell) {
+                if (puzzle[selectedCell.row][selectedCell.col] !== 0) {
+                    highlightNum = puzzle[selectedCell.row][selectedCell.col];
+                } else if (userBoard[selectedCell.row][selectedCell.col] !== 0) {
+                    highlightNum = userBoard[selectedCell.row][selectedCell.col];
+                } else if (pencilMarks[selectedCell.row][selectedCell.col].length > 0) {
+                    // If selected cell is a pencil cell, do not highlight others
+                    highlightIsPencil = true;
+                }
+            }
+            if (highlightNum !== null) {
+                for (let r = 0; r < 9; r++) for (let c = 0; c < 9; c++) {
+                    if (userBoard[r][c] === highlightNum || puzzle[r][c] === highlightNum) {
+                        ctx.save();
+                        ctx.fillStyle = 'rgba(255,230,100,0.4)';
+                        ctx.fillRect(c * cellSize, r * cellSize, cellSize, cellSize);
+                        ctx.restore();
+                    } else if (pencilMarks[r][c].includes(highlightNum)) {
+                        // Only highlight the area of the pencil number
+                        let n = highlightNum;
+                        let px = c * cellSize + ((n - 1) % 3) * cellSize / 3;
+                        let py = r * cellSize + Math.floor((n - 1) / 3) * cellSize / 3;
+                        ctx.save();
+                        ctx.fillStyle = 'rgba(255,230,100,0.4)';
+                        ctx.fillRect(px, py, cellSize / 3, cellSize / 3);
+                        ctx.restore();
+                    }
+                }
+            }
+            // Highlight selected cell or pencil area
+            if (selectedCell) {
+                ctx.save();
+                ctx.fillStyle = 'rgba(100,180,255,0.3)';
+                ctx.fillRect(selectedCell.col * cellSize, selectedCell.row * cellSize, cellSize, cellSize);
+                ctx.restore();
+            }
+
+            // Draw grid
+            ctx.strokeStyle = '#000';
+            for (let i = 0; i <= 9; i++) {
+                ctx.beginPath();
+                ctx.lineWidth = (i % 3 === 0) ? 3 : 1;
+                ctx.moveTo(0, i * cellSize);
+                ctx.lineTo(boardSize, i * cellSize);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.lineWidth = (i % 3 === 0) ? 3 : 1;
+                ctx.moveTo(i * cellSize, 0);
+                ctx.lineTo(i * cellSize, boardSize);
+                ctx.stroke();
+            }
+
+            // Draw numbers and pencil marks
+            ctx.font = 'bold 24px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            for (let r = 0; r < 9; r++) for (let c = 0; c < 9; c++) {
+                let x = c * cellSize + cellSize / 2;
+                let y = r * cellSize + cellSize / 2;
+                if (puzzle[r][c] !== 0) {
+                    ctx.fillStyle = '#111';
+                    ctx.fillText(puzzle[r][c], x, y);
+                } else if (userBoard[r][c] !== 0) {
+                    let valid = isSafe(userBoard, r, c, userBoard[r][c]);
+                    ctx.fillStyle = valid ? '#1976d2' : '#d32f2f';
+                    ctx.fillText(userBoard[r][c], x, y);
+                } else if (pencilMarks[r][c].length > 0) {
+                    ctx.save();
+                    ctx.font = '12px Arial';
+                    ctx.fillStyle = '#888';
+                    for (let n of pencilMarks[r][c]) {
+                        let px = c * cellSize + ((n - 1) % 3 + 0.5) * cellSize / 3;
+                        let py = r * cellSize + (Math.floor((n - 1) / 3) + 0.5) * cellSize / 3;
+                        ctx.fillText(n, px, py);
+                    }
+                    ctx.restore();
+                }
+            }
+            ctx.restore();
+        }
+
+        function drawNumbers() {
+            // Draw pencil button above number buttons
+            const pencilY = boardOffsetY + boardSize + 10;
+            const px = boardOffsetX;
+            ctx.save();
+            ctx.beginPath();
+            ctx.roundRect(px, pencilY, numberSize * 2, numberSize, 10);
+            ctx.fillStyle = pencilMode ? '#1976d2' : '#eee';
+            ctx.fill();
+            ctx.strokeStyle = pencilMode ? '#1976d2' : '#888';
+            ctx.lineWidth = pencilMode ? 3 : 1;
+            ctx.stroke();
+            ctx.fillStyle = pencilMode ? '#fff' : '#222';
+            ctx.font = 'bold 18px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('Pencil', px + (numberSize * 2) / 2, pencilY + numberSize / 2);
+            ctx.restore();
+
+            // Auto pencil button next to pencil
+            const apx = px + numberSize * 2 + 10;
+            ctx.save();
+            ctx.beginPath();
+            ctx.roundRect(apx, pencilY, numberSize * 3, numberSize, 10);
+            ctx.fillStyle = '#ffb300';
+            ctx.fill();
+            ctx.strokeStyle = '#ff9800';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            ctx.fillStyle = '#222';
+            ctx.font = 'bold 16px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('Auto Pencil', apx + (numberSize * 3) / 2, pencilY + numberSize / 2);
+            ctx.restore();
+
+            // Draw number buttons below pencil buttons
+            for (let i = 1; i <= 9; i++) {
+                const x = boardOffsetX + (i - 1) * (numberSize + 10);
+                const y = numbersY;
+                ctx.beginPath();
+                ctx.arc(x + numberSize / 2, y + numberSize / 2, numberSize / 2, 0, 2 * Math.PI);
+                ctx.fillStyle = '#eee';
+                ctx.fill();
+                ctx.strokeStyle = '#888';
+                ctx.stroke();
+                let pressed = false;
+                if (selectedCell && pencilMode && pencilMarks[selectedCell.row][selectedCell.col].includes(i)) pressed = true;
+                if (selectedCell && !pencilMode && userBoard[selectedCell.row][selectedCell.col] === i) pressed = true;
+                if (pressed) {
+                    ctx.save();
+                    ctx.strokeStyle = '#1976d2';
+                    ctx.lineWidth = 3;
+                    ctx.beginPath();
+                    ctx.arc(x + numberSize / 2, y + numberSize / 2, numberSize / 2 - 2, 0, 2 * Math.PI);
+                    ctx.stroke();
+                    ctx.restore();
+                }
+                ctx.fillStyle = '#222';
+                ctx.font = 'bold 24px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(i, x + numberSize / 2, y + numberSize / 2);
+            }
+        }
+
+        function drawNewGameButton() {
+            // Move new game button above the puzzle
+            const btnY = boardOffsetY - 60;
+            ctx.save();
+            ctx.beginPath();
+            ctx.roundRect(newGameBtn.x, btnY, newGameBtn.w, newGameBtn.h, 12);
+            ctx.fillStyle = '#4caf50';
+            ctx.fill();
+            ctx.strokeStyle = '#388e3c';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 24px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('New Game', newGameBtn.x + newGameBtn.w / 2, btnY + newGameBtn.h / 2);
+            ctx.restore();
+        }
+
+        function drawAll() {
+            console.log("start Draw")
+            drawBoard();
+            drawNumbers();
+            drawNewGameButton();
+            console.log("end Draw")
+        }
+
+        canvas.addEventListener('click', function (e) {
+            const rect = canvas.getBoundingClientRect();
+            const mx = e.clientX - rect.left;
+            const my = e.clientY - rect.top;
+
+            // Check new game button
+            const newGameBtnY = boardOffsetY - 60;
+            if (
+                mx >= newGameBtn.x && mx <= newGameBtn.x + newGameBtn.w &&
+                my >= newGameBtnY && my <= newGameBtnY + newGameBtn.h
+            ) {
+                askDifficulty();
+                return;
+            }
+
+            // Check pencil button
+            const pencilBtnY = boardOffsetY + boardSize + 10;
+            const px = boardOffsetX;
+            if (
+                mx >= px && mx <= px + numberSize * 2 &&
+                my >= pencilBtnY && my <= pencilBtnY + numberSize
+            ) {
+                pencilMode = !pencilMode;
+                drawAll();
+                return;
+            }
+            const apx = px + numberSize + 40;
+            if (
+                mx >= apx && mx <= apx + numberSize * 3 &&
+                my >= pencilBtnY && my <= pencilBtnY + numberSize
+            ) {
+                autoPencil();
+                return;
+            }
+
+            // Check number buttons
+            for (let i = 1; i <= 9; i++) {
+                const x = boardOffsetX + (i - 1) * (numberSize + 10);
+                const cx = x + numberSize / 2;
+                const cy = numbersY + numberSize / 2;
+                const dist = Math.sqrt((mx - cx) ** 2 + (my - cy) ** 2);
+                if (dist <= numberSize / 2) {
+                    if (selectedCell && puzzle[selectedCell.row][selectedCell.col] === 0) {
+                        if (pencilMode) {
+                            let arr = pencilMarks[selectedCell.row][selectedCell.col];
+                            let idx = arr.indexOf(i);
+                            if (idx === -1) arr.push(i); else arr.splice(idx, 1);
+                            arr.sort();
+                        } else {
+                            if (userBoard[selectedCell.row][selectedCell.col] === i) {
+                                userBoard[selectedCell.row][selectedCell.col] = 0;
+                            } else {
+                                userBoard[selectedCell.row][selectedCell.col] = i;
+                            }
+                            pencilMarks[selectedCell.row][selectedCell.col] = [];
+                            checkWin();
+                        }
+                        drawAll();
+                    }
+                    return;
+                }
+            }
+            // Check board cell
+            if (
+                mx >= boardOffsetX && mx < boardOffsetX + boardSize &&
+                my >= boardOffsetY && my < boardOffsetY + boardSize
+            ) {
+                const col = Math.floor((mx - boardOffsetX) / cellSize);
+                const row = Math.floor((my - boardOffsetY) / cellSize);
+                // Allow selecting any cell (even prefilled)
+                selectedCell = { row, col };
+                drawAll();
+                return;
+            }
+            selectedCell = null;
+            drawAll();
+        });
+
+        function askDifficulty() {
+            let prev = localStorage.getItem('sudoku_difficulty') || '40';
+            let diff = prompt('Enter difficulty (number of empty cells, 1-80):', prev);
+            if (diff === null) return;
+            diff = parseInt(diff, 10);
+            if (isNaN(diff) || diff < 1 || diff > 80) {
+                alert('Please enter a valid number between 1 and 80.');
+                askDifficulty();
+                return;
+            }
+            localStorage.setItem('sudoku_difficulty', diff);
+            generatePuzzle(diff);
+            selectedCell = null;
+            drawAll();
+        }
+
+        function autoPencil() {
+            console.log("start Auto Pencil")
+            for (let r = 0; r < 9; r++) for (let c = 0; c < 9; c++) {
+                if (puzzle[r][c] === 0 && userBoard[r][c] === 0 && (!pencilMarks[r][c] || pencilMarks[r][c].length === 0)) {
+                    pencilMarks[r][c] = [];
+                    for (let n = 1; n <= 9; n++) {
+                        if (isSafe(userBoard, r, c, n)) pencilMarks[r][c].push(n);
+                    }
+                }
+            }
+            console.log("end Auto Pencil")
+            drawAll();
+        }
+
+        function checkWin() {
+            // Check if all empty cells are filled
+            for (let r = 0; r < 9; r++) for (let c = 0; c < 9; c++)
+                if (puzzle[r][c] === 0 && userBoard[r][c] === 0) return;
+
+            // Check if userBoard is a valid Sudoku solution
+            for (let r = 0; r < 9; r++) for (let c = 0; c < 9; c++) {
+                if (puzzle[r][c] === 0) {
+                    let val = userBoard[r][c];
+                    if (!isSafe(userBoard, r, c, val)) return;
+                }
+            }
+            setTimeout(() => alert('You won!'), 100);
+        }
+
+        // Initial puzzle
+        // askDifficulty();
+        generatePuzzle(0);
+        drawAll();
+    </script>
+</body>
+
+</html>
