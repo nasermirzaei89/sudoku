@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sudoku Canvas</title>
+    <title>Sudoku</title>
 </head>
 <style>
     body {
@@ -16,18 +16,28 @@
 </style>
 
 <body>
-    <canvas id="sudoku" width="500" height="820"></canvas>
+    <canvas id="sudoku" width="600" height="900"></canvas>
     <script>
         const canvas = document.getElementById('sudoku');
         const ctx = canvas.getContext('2d');
 
-        const boardSize = 450;
-        const cellSize = boardSize / 9;
-        const boardOffsetX = 25;
+        canvas.width = Math.max(window.innerWidth, canvas.width);
+        canvas.height = Math.max(window.innerHeight, canvas.height);
+
+        const cellSize = 64;
+        const spacingSize = 12;
+        const buttonRadius = 12;
+
+        const boardSize = 9 * cellSize;
+        const boardOffsetX = canvas.width / 2 - boardSize / 2;
         const boardOffsetY = canvas.height / 2 - boardSize / 2;
-        const numberSize = 40;
-        const numbersY = boardOffsetY + boardSize + numberSize + 20;
-        const newGameBtn = { x: 150, y: numbersY + 70, w: 200, h: 50 };
+
+        const numberSize = (boardSize - 8 * spacingSize) / 9;
+        const numbersY = boardOffsetY + boardSize + spacingSize + numberSize + spacingSize;
+
+        const newGameBtnWidth = numberSize * 3;
+        const newGameBtnHeight = numberSize;
+        const newGameBtn = { x: boardOffsetX + boardSize - newGameBtnWidth, y: boardOffsetY - (spacingSize + newGameBtnHeight), w: newGameBtnWidth, h: newGameBtnHeight };
 
         let puzzle = [];
         let solution = [];
@@ -98,7 +108,7 @@
         }
 
         function drawBoard() {
-            ctx.fillStyle = '#efefef';
+            ctx.fillStyle = '#fff';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
             ctx.save();
             ctx.translate(boardOffsetX, boardOffsetY);
@@ -189,35 +199,35 @@
 
         function drawNumbers() {
             // Draw pencil button above number buttons
-            const pencilY = boardOffsetY + boardSize + 10;
+            const pencilY = boardOffsetY + boardSize + spacingSize;
             const px = boardOffsetX;
             ctx.save();
             ctx.beginPath();
-            ctx.roundRect(px, pencilY, numberSize * 2, numberSize, 10);
+            ctx.roundRect(px, pencilY, numberSize * 2, numberSize, buttonRadius);
             ctx.fillStyle = pencilMode ? '#1976d2' : '#eee';
             ctx.fill();
             ctx.strokeStyle = pencilMode ? '#1976d2' : '#888';
             ctx.lineWidth = pencilMode ? 3 : 1;
             ctx.stroke();
             ctx.fillStyle = pencilMode ? '#fff' : '#222';
-            ctx.font = 'bold 18px Arial';
+            ctx.font = 'bold 24px Arial';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             ctx.fillText('Pencil', px + (numberSize * 2) / 2, pencilY + numberSize / 2);
             ctx.restore();
 
             // Auto pencil button next to pencil
-            const apx = px + numberSize * 2 + 10;
+            const apx = px + numberSize * 2 + spacingSize;
             ctx.save();
             ctx.beginPath();
-            ctx.roundRect(apx, pencilY, numberSize * 3, numberSize, 10);
+            ctx.roundRect(apx, pencilY, numberSize * 3, numberSize, buttonRadius);
             ctx.fillStyle = '#ffb300';
             ctx.fill();
             ctx.strokeStyle = '#ff9800';
             ctx.lineWidth = 2;
             ctx.stroke();
             ctx.fillStyle = '#222';
-            ctx.font = 'bold 16px Arial';
+            ctx.font = 'bold 24px Arial';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             ctx.fillText('Auto Pencil', apx + (numberSize * 3) / 2, pencilY + numberSize / 2);
@@ -225,10 +235,10 @@
 
             // Draw number buttons below pencil buttons
             for (let i = 1; i <= 9; i++) {
-                const x = boardOffsetX + (i - 1) * (numberSize + 10);
+                const x = boardOffsetX + (i - 1) * (numberSize + spacingSize);
                 const y = numbersY;
                 ctx.beginPath();
-                ctx.arc(x + numberSize / 2, y + numberSize / 2, numberSize / 2, 0, 2 * Math.PI);
+                ctx.roundRect(x, y, numberSize, numberSize, buttonRadius);
                 ctx.fillStyle = '#eee';
                 ctx.fill();
                 ctx.strokeStyle = '#888';
@@ -241,7 +251,7 @@
                     ctx.strokeStyle = '#1976d2';
                     ctx.lineWidth = 3;
                     ctx.beginPath();
-                    ctx.arc(x + numberSize / 2, y + numberSize / 2, numberSize / 2 - 2, 0, 2 * Math.PI);
+                    ctx.roundRect(x, y, numberSize, numberSize, buttonRadius);
                     ctx.stroke();
                     ctx.restore();
                 }
@@ -254,11 +264,9 @@
         }
 
         function drawNewGameButton() {
-            // Move new game button above the puzzle
-            const btnY = boardOffsetY - 60;
             ctx.save();
             ctx.beginPath();
-            ctx.roundRect(newGameBtn.x, btnY, newGameBtn.w, newGameBtn.h, 12);
+            ctx.roundRect(newGameBtn.x, newGameBtn.y, newGameBtn.w, newGameBtn.h, buttonRadius);
             ctx.fillStyle = '#4caf50';
             ctx.fill();
             ctx.strokeStyle = '#388e3c';
@@ -268,7 +276,7 @@
             ctx.font = 'bold 24px Arial';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
-            ctx.fillText('New Game', newGameBtn.x + newGameBtn.w / 2, btnY + newGameBtn.h / 2);
+            ctx.fillText('New Game', newGameBtn.x + newGameBtn.w / 2, newGameBtn.y + newGameBtn.h / 2);
             ctx.restore();
         }
 
@@ -360,7 +368,7 @@
 
         function askDifficulty() {
             let prev = localStorage.getItem('sudoku_difficulty') || '40';
-            let diff = prompt('Enter difficulty (number of empty cells, 1-80):', prev);
+            let diff = prompt('Enter difficulty (1-80):', prev);
             if (diff === null) return;
             diff = parseInt(diff, 10);
             if (isNaN(diff) || diff < 1 || diff > 80) {
